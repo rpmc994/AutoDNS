@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AutoDNS</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d27;
+      --border:   #2a2d3a;
+      --accent:   #4f8ef7;
+      --accent-h: #3a7ae8;
+      --text:     #e2e4ed;
+      --muted:    #6b7280;
+      --success:  #22c55e;
+      --warning:  #f59e0b;
+      --danger:   #ef4444;
+      --radius:   10px;
+      --font:     'Inter', 'Segoe UI', system-ui, sans-serif;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    header {
+      max-width: 860px;
+      margin: 0 auto 2rem;
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+    }
+
+    header svg { flex-shrink: 0; }
+
+    header h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -.02em;
+    }
+
+    header span {
+      font-size: .8rem;
+      color: var(--muted);
+      margin-left: auto;
+    }
+
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.25rem;
+    }
+
+    .left-col,
+    .right-col {
+      display: grid;
+      gap: 1.25rem;
+    }
+
+    @media (min-width: 1024px) {
+      .layout {
+        grid-template-columns: minmax(420px, 1fr) minmax(500px, 1.15fr);
+        align-items: start;
+      }
+
+      .right-col .card {
+        position: sticky;
+        top: 1rem;
+      }
+    }
+
+    /* ── cards ─────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.4rem 1.6rem;
+    }
+
+    .card-title {
+      font-size: .7rem;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
+
+    /* ── status row ─────────────────────────────────── */
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+    }
+
+    .stat {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .9rem 1rem;
+    }
+
+    .stat-label {
+      font-size: .7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: .35rem;
+    }
+
+    .stat-value {
+      font-size: 1.05rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: .2rem .65rem;
+      border-radius: 999px;
+      font-size: .75rem;
+      font-weight: 600;
+    }
+    .pill-success   { background: rgba(34,197,94,.15);  color: var(--success); }
+    .pill-warning   { background: rgba(245,158,11,.15); color: var(--warning); }
+    .pill-danger    { background: rgba(239,68,68,.15);  color: var(--danger);  }
+    .pill-idle      { background: rgba(107,114,128,.15);color: var(--muted);   }
+    .pill-pending   { background: rgba(79,142,247,.15); color: var(--accent);  }
+    .pill-confirmed { background: rgba(34,197,94,.10);  color: var(--success); }
+
+    /* ── form ───────────────────────────────────────── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .9rem;
+    }
+
+    @media (max-width: 560px) { .form-grid { grid-template-columns: 1fr; } }
+
+    .field { display: flex; flex-direction: column; gap: .35rem; }
+    .field.full { grid-column: 1 / -1; }
+
+    label {
+      font-size: .75rem;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    input, select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      font-size: .9rem;
+      padding: .55rem .75rem;
+      outline: none;
+      transition: border-color .15s;
+      font-family: var(--font);
+      width: 100%;
+    }
+    input:focus, select:focus { border-color: var(--accent); }
+    select option { background: var(--surface); }
+
+    .form-actions {
+      margin-top: 1.1rem;
+      display: flex;
+      gap: .75rem;
+      align-items: center;
+    }
+
+    .btn {
+      border: none;
+      border-radius: 7px;
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: .85rem;
+      font-weight: 600;
+      padding: .55rem 1.2rem;
+      transition: background .15s, opacity .15s;
+    }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-h); }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+
+    #save-msg {
+      font-size: .8rem;
+      color: var(--success);
+      opacity: 0;
+      transition: opacity .3s;
+    }
+    #save-msg.visible { opacity: 1; }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .82rem;
+    }
+
+    thead th {
+      text-align: left;
+      font-size: .68rem;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: .5rem .75rem;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    tbody tr { border-bottom: 1px solid var(--border); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,.02); }
+
+    tbody td {
+      padding: .6rem .75rem;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    .td-msg { white-space: normal; word-break: break-word; color: var(--muted); }
+
+    .empty-state {
+      text-align: center;
+      padding: 2rem;
+      color: var(--muted);
+      font-size: .85rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <!-- shield / DNS icon -->
+  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--accent)"
+       stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+  </svg>
+  <h1>AutoDNS</h1>
+  <span id="clock"></span>
+</header>
+
+<main>
+  <div class="layout">
+    <div class="left-col">
+      <!-- ── Status Card ──────────────────────────────────── -->
+      <div class="card">
+        <p class="card-title">Current Status</p>
+        <div class="status-grid">
+          <div class="stat">
+            <div class="stat-label">Public WAN IP</div>
+            <div class="stat-value" id="stat-ip">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Last Checked</div>
+            <div class="stat-value" id="stat-checked" style="font-size:.85rem">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Last Result</div>
+            <div class="stat-value" id="stat-result">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Record</div>
+            <div class="stat-value" id="stat-record" style="font-size:.85rem">—</div>
+          </div>
+        </div>
+        <div style="margin-top:1rem">
+          <div class="stat" style="padding:.75rem 1rem">
+            <div class="stat-label">Cloudflare Response</div>
+            <div class="stat-value" id="stat-cf-response" style="font-size:.8rem; font-weight:500; white-space:normal; line-height:1.45">—</div>
+          </div>
+        </div>
+        <div style="margin-top:1rem">
+          <button class="btn btn-ghost" id="btn-check">Check Now</button>
+        </div>
+      </div>
+
+      <!-- ── Settings Card ────────────────────────────────── -->
+      <div class="card">
+        <p class="card-title">Cloudflare Settings</p>
+        <form id="settings-form" autocomplete="off">
+          <div class="form-grid">
+            <div class="field full">
+              <label for="api-token">API Token</label>
+              <input id="api-token" name="api_token" type="password"
+                     placeholder="Enter new token (leave blank to keep existing)" />
+              <span id="token-hint" style="font-size:.75rem;color:var(--muted);display:none">A token is already stored — leave blank to keep it.</span>
+            </div>
+            <div class="field">
+              <label for="zone-id">Zone ID</label>
+              <input id="zone-id" name="zone_id" type="text" placeholder="xxxxxxxxxxxxxxxx" />
+            </div>
+            <div class="field">
+              <label for="record-id">Record ID (optional)</label>
+              <input id="record-id" name="record_id" type="text" placeholder="xxxxxxxxxxxxxxxx" />
+            </div>
+            <div class="field">
+              <label for="record-name">Record Name</label>
+              <input id="record-name" name="record_name" type="text" placeholder="sub.domain.co.uk (required if Record ID is blank)" />
+            </div>
+            <div class="field">
+              <label for="interval">Sync Interval</label>
+              <select id="interval" name="interval_min">
+                <option value="5">Every 5 minutes</option>
+                <option value="15" selected>Every 15 minutes</option>
+                <option value="30">Every 30 minutes</option>
+                <option value="60">Every 60 minutes</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="btn-save">Save Settings</button>
+            <span id="save-msg">Saved ✓</span>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="right-col">
+      <!-- ── History Log Card ─────────────────────────────── -->
+      <div class="card">
+        <p class="card-title">Execution History <span style="color:var(--muted);font-size:.7rem">(last 20)</span></p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Status</th>
+                <th>Previous IP</th>
+                <th>New IP</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody id="log-tbody">
+              <tr><td colspan="5" class="empty-state">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  // ── Clock ────────────────────────────────────────────
+  const clockEl = document.getElementById('clock');
+  function updateClock() {
+    const now = new Date();
+    clockEl.textContent = now.toLocaleString('en-GB', {
+      timeZone: 'Europe/London',
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false
+    }).replace(',', '');
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // ── Fetch helpers ─────────────────────────────────────
+  const AUTH_STORAGE_KEY = 'autodns_auth_token';
+
+  function getAuthToken() {
+    return (localStorage.getItem(AUTH_STORAGE_KEY) || '').trim();
+  }
+
+  function authHeaders() {
+    const token = getAuthToken();
+    return token ? { 'X-AutoDNS-Token': token } : {};
+  }
+
+  async function requestJSON(url, options = {}, allowRetryOn401 = true) {
+    const headers = { ...(options.headers || {}), ...authHeaders() };
+    const r = await fetch(url, { ...options, headers });
+
+    if (r.status === 401 && allowRetryOn401) {
+      const entered = prompt('Enter AutoDNS auth token');
+      if (entered !== null && entered.trim() !== '') {
+        localStorage.setItem(AUTH_STORAGE_KEY, entered.trim());
+        return requestJSON(url, options, false);
+      }
+    }
+
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+
+  async function get(url) {
+    return requestJSON(url);
+  }
+
+  async function post(url, body) {
+    return requestJSON(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
+  // ── Status ───────────────────────────────────────────
+  const statIP      = document.getElementById('stat-ip');
+  const statChecked = document.getElementById('stat-checked');
+  const statResult  = document.getElementById('stat-result');
+  const statRecord  = document.getElementById('stat-record');
+  const statCFResp  = document.getElementById('stat-cf-response');
+
+  function pillFor(status) {
+    if (!status || status === '—') return `<span class="pill pill-idle">—</span>`;
+    if (status === 'Success')   return `<span class="pill pill-success">Success</span>`;
+    if (status === 'No Change') return `<span class="pill pill-warning">No Change</span>`;
+    if (status === 'Pending')   return `<span class="pill pill-pending">Pending</span>`;
+    if (status === 'Confirmed') return `<span class="pill pill-confirmed">Confirmed</span>`;
+    return `<span class="pill pill-danger">Failed</span>`;
+  }
+
+  async function refreshStatus() {
+    try {
+      const s = await get('/api/status');
+      statIP.textContent      = s.last_ip || '—';
+      statChecked.textContent = s.updated_at || '—';
+    } catch (e) { console.error('status:', e); }
+  }
+
+  async function refreshLogs() {
+    try {
+      const logs = await get('/api/logs');
+      const tbody = document.getElementById('log-tbody');
+      if (!logs || logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No checks recorded yet.</td></tr>';
+        return;
+      }
+
+      // Update last-result pill from newest log entry.
+      if (logs[0]) {
+        statResult.innerHTML = pillFor(logs[0].status);
+        statCFResp.textContent = logs[0].message || '—';
+      } else {
+        statCFResp.textContent = '—';
+      }
+
+      tbody.innerHTML = logs.map(e => `
+        <tr>
+          <td>${esc(e.timestamp)}</td>
+          <td>${pillFor(e.status)}</td>
+          <td>${esc(e.old_ip)}</td>
+          <td>${esc(e.new_ip)}</td>
+          <td class="td-msg">${esc(e.message)}</td>
+        </tr>`).join('');
+      return logs;
+    } catch (e) { console.error('logs:', e); return []; }
+  }
+
+  function esc(str) {
+    return String(str ?? '—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── Settings form ────────────────────────────────────
+  async function loadSettings() {
+    try {
+      const cfg = await get('/api/settings');
+      // Never populate the token field — show a hint if one is already stored.
+      const hint = document.getElementById('token-hint');
+      if (cfg.api_token_set) {
+        document.getElementById('api-token').placeholder = '••••••••••••••••';
+        hint.style.display = 'block';
+      } else {
+        hint.style.display = 'none';
+      }
+      document.getElementById('zone-id').value     = cfg.zone_id      || '';
+      document.getElementById('record-id').value   = cfg.record_id    || '';
+      document.getElementById('record-name').value = cfg.record_name  || '';
+      document.getElementById('interval').value    = String(cfg.interval_min || 15);
+      statRecord.textContent = cfg.record_name || cfg.record_id || '—';
+    } catch (e) { console.error('settings:', e); }
+  }
+
+  document.getElementById('settings-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const btn = document.getElementById('btn-save');
+    btn.disabled = true;
+    try {
+      await post('/api/settings', {
+        api_token:    document.getElementById('api-token').value.trim(),
+        zone_id:      document.getElementById('zone-id').value.trim(),
+        record_id:    document.getElementById('record-id').value.trim(),
+        record_name:  document.getElementById('record-name').value.trim(),
+        interval_min: parseInt(document.getElementById('interval').value, 10)
+      });
+      const msg = document.getElementById('save-msg');
+      msg.classList.add('visible');
+      statRecord.textContent = document.getElementById('record-name').value.trim() || document.getElementById('record-id').value.trim() || '—';
+      setTimeout(() => msg.classList.remove('visible'), 2500);
+    } catch (e) { alert('Save failed: ' + e.message); }
+    finally { btn.disabled = false; }
+  });
+
+  // ── Check Now ────────────────────────────────────────
+  document.getElementById('btn-check').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-check');
+    btn.disabled = true;
+    btn.textContent = 'Checking (awaiting Cloudflare)…';
+    try {
+      const before = await refreshLogs();
+      const topID = before[0]?.id || 0;
+      await post('/api/check', {});
+
+      const timeoutAt = Date.now() + 20000;
+      let done = false;
+      while (!done && Date.now() < timeoutAt) {
+        await new Promise(r => setTimeout(r, 1000));
+        await refreshStatus();
+        const logs = await refreshLogs();
+        done = logs.length > 0 && logs[0].id !== topID;
+      }
+
+      await Promise.all([refreshStatus(), refreshLogs()]);
+    } catch (e) { alert('Check failed: ' + e.message); }
+    finally { btn.disabled = false; btn.textContent = 'Check Now'; }
+  });
+
+  // ── Auto-refresh every 30 s ───────────────────────────
+  async function refresh() {
+    await Promise.all([refreshStatus(), refreshLogs()]);
+  }
+
+  (async () => {
+    await loadSettings();
+    await refresh();
+    setInterval(refresh, 30_000);
+  })();
+</script>
+</body>
+</html>
