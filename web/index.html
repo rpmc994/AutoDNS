@@ -215,7 +215,7 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: .82rem;
+      font-size: .79rem;
     }
 
     thead th {
@@ -234,13 +234,69 @@
     tbody tr:last-child { border-bottom: none; }
     tbody tr:hover { background: rgba(255,255,255,.02); }
 
+    .log-row { cursor: pointer; }
+    .log-row:focus-visible {
+      outline: 1px solid var(--accent);
+      outline-offset: -1px;
+    }
+
     tbody td {
-      padding: .6rem .75rem;
+      padding: .46rem .65rem;
       vertical-align: middle;
       white-space: nowrap;
     }
 
-    .td-msg { white-space: normal; word-break: break-word; color: var(--muted); }
+    .history-hint {
+      margin-top: .5rem;
+      font-size: .72rem;
+      color: var(--muted);
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .52);
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+      z-index: 1000;
+    }
+
+    .modal-backdrop[hidden] { display: none; }
+
+    .modal {
+      width: min(520px, 100%);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1rem .9rem;
+      box-shadow: 0 16px 30px rgba(0, 0, 0, .4);
+    }
+
+    .modal-title {
+      font-size: .8rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: .7rem;
+      font-weight: 600;
+    }
+
+    .modal-body {
+      font-size: .9rem;
+      line-height: 1.45;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 45vh;
+      overflow-y: auto;
+    }
+
+    .modal-actions {
+      margin-top: .9rem;
+      display: flex;
+      justify-content: flex-end;
+    }
 
     .empty-state {
       text-align: center;
@@ -350,19 +406,29 @@
                 <th>Status</th>
                 <th>Previous IP</th>
                 <th>New IP</th>
-                <th>Message</th>
               </tr>
             </thead>
             <tbody id="log-tbody">
-              <tr><td colspan="5" class="empty-state">Loading…</td></tr>
+              <tr><td colspan="4" class="empty-state">Loading…</td></tr>
             </tbody>
           </table>
         </div>
+        <p class="history-hint">Tip: click any row to view the full message.</p>
       </div>
     </div>
   </div>
 
 </main>
+
+<div id="message-modal-backdrop" class="modal-backdrop" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="message-modal-title">
+    <p class="modal-title" id="message-modal-title">Execution Message</p>
+    <div class="modal-body" id="message-modal-body">—</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="message-modal-close" type="button">Close</button>
+    </div>
+  </div>
+</div>
 
 <script>
   // ── Clock ────────────────────────────────────────────
@@ -425,6 +491,11 @@
   const statResult  = document.getElementById('stat-result');
   const statRecord  = document.getElementById('stat-record');
   const statCFResp  = document.getElementById('stat-cf-response');
+  const messageModalBackdrop = document.getElementById('message-modal-backdrop');
+  const messageModalBody = document.getElementById('message-modal-body');
+  const messageModalClose = document.getElementById('message-modal-close');
+  const logsTbody = document.getElementById('log-tbody');
+  let lastLogs = [];
 
   function pillFor(status) {
     if (!status || status === '—') return `<span class="pill pill-idle">—</span>`;
@@ -446,9 +517,10 @@
   async function refreshLogs() {
     try {
       const logs = await get('/api/logs');
-      const tbody = document.getElementById('log-tbody');
+      const tbody = logsTbody;
+      lastLogs = logs || [];
       if (!logs || logs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No checks recorded yet.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No checks recorded yet.</td></tr>';
         return;
       }
 
@@ -460,13 +532,12 @@
         statCFResp.textContent = '—';
       }
 
-      tbody.innerHTML = logs.map(e => `
-        <tr>
+      tbody.innerHTML = logs.map((e, i) => `
+        <tr class="log-row" data-index="${i}" tabindex="0" role="button" aria-label="View message for ${esc(e.timestamp)}">
           <td>${esc(e.timestamp)}</td>
           <td>${pillFor(e.status)}</td>
           <td>${esc(e.old_ip)}</td>
           <td>${esc(e.new_ip)}</td>
-          <td class="td-msg">${esc(e.message)}</td>
         </tr>`).join('');
       return logs;
     } catch (e) { console.error('logs:', e); return []; }
@@ -475,6 +546,44 @@
   function esc(str) {
     return String(str ?? '—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
+
+  function openMessageModal(message) {
+    messageModalBody.textContent = (message || 'No message available.').trim() || 'No message available.';
+    messageModalBackdrop.hidden = false;
+    messageModalClose.focus();
+  }
+
+  function closeMessageModal() {
+    messageModalBackdrop.hidden = true;
+  }
+
+  logsTbody.addEventListener('click', (ev) => {
+    const row = ev.target.closest('tr.log-row');
+    if (!row) return;
+    const idx = Number(row.dataset.index);
+    const entry = Number.isInteger(idx) ? lastLogs[idx] : null;
+    openMessageModal(entry?.message || 'No message available.');
+  });
+
+  logsTbody.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    const row = ev.target.closest('tr.log-row');
+    if (!row) return;
+    ev.preventDefault();
+    const idx = Number(row.dataset.index);
+    const entry = Number.isInteger(idx) ? lastLogs[idx] : null;
+    openMessageModal(entry?.message || 'No message available.');
+  });
+
+  messageModalClose.addEventListener('click', closeMessageModal);
+
+  messageModalBackdrop.addEventListener('click', (ev) => {
+    if (ev.target === messageModalBackdrop) closeMessageModal();
+  });
+
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && !messageModalBackdrop.hidden) closeMessageModal();
+  });
 
   // ── Settings form ────────────────────────────────────
   async function loadSettings() {
